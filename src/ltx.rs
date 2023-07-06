@@ -1,5 +1,5 @@
 use crate::types::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, TXIDError, TXID};
-use std::{io, mem, time};
+use std::{io, time};
 
 pub(crate) const CRC64: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_GO_ISO);
 
@@ -54,6 +54,7 @@ pub enum HeaderDecodeError {
 
 pub(crate) const HEADER_SIZE: usize = 100;
 pub(crate) const TRAILER_SIZE: usize = 16;
+pub(crate) const PAGE_HEADER_SIZE: usize = 4;
 
 /// Header represets the header frame of an LTX file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,7 +274,7 @@ impl PageHeader {
     where
         R: io::Read,
     {
-        let mut buf = [0; mem::size_of::<PageNum>()];
+        let mut buf = [0; PAGE_HEADER_SIZE];
         r.read_exact(&mut buf)?;
 
         let page_num = u32::from_be_bytes(buf[0..4].try_into().unwrap());
@@ -290,21 +291,14 @@ impl PageHeader {
 #[cfg(test)]
 mod tests {
     use super::{Header, HeaderFlags, HeaderValidateError, PageHeader, Trailer};
-    use crate::{Checksum, PageNum, PageSize, TXID};
+    use crate::{utils::TimeRound, Checksum, PageNum, PageSize, TXID};
     use std::time;
 
     fn encode_decode_header(mut hdr: Header) {
         let mut buf = Vec::new();
 
         // round timestamp to milliseconds to be able to compare it later.
-        hdr.timestamp = time::SystemTime::UNIX_EPOCH
-            .checked_add(time::Duration::from_millis(
-                hdr.timestamp
-                    .duration_since(time::SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64,
-            ))
-            .unwrap();
+        hdr.timestamp = hdr.timestamp.round(time::Duration::from_millis(1)).unwrap();
 
         hdr.encode_into(&mut buf).expect("failed to encode header");
         let hdr_out = Header::decode_from(buf.as_slice()).expect("failed to decode header");

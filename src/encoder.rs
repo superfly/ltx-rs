@@ -1,15 +1,19 @@
 use crate::{
-    ltx::{PageHeader, CRC64},
-    Checksum, Header, HeaderFlags, PageNum, PageSize, Result, Trailer,
+    ltx::{HeaderEncodeError, PageHeader, PageHeaderEncodeError, TrailerEncodeError, CRC64},
+    Checksum, Header, HeaderFlags, PageNum, PageSize, Trailer,
 };
 use lz4_flex::frame::{BlockSize, FrameEncoder, FrameInfo};
-use std::{
-    io::{self, Write},
-    result,
-};
+use std::io::{self, Write};
 
 #[derive(thiserror::Error, Debug)]
-pub enum PageEncodeError {
+// An error that can be returned by `[Encoder]`.
+pub enum Error {
+    #[error("header")]
+    Header(#[from] HeaderEncodeError),
+    #[error("page header")]
+    PageHeader(#[from] PageHeaderEncodeError),
+    #[error("trailer")]
+    Trailer(#[from] TrailerEncodeError),
     #[error("cannot encode lock page: {0}")]
     LockPage(PageNum),
     #[error("snapshot transaction file must start with page number 1")]
@@ -20,7 +24,7 @@ pub enum PageEncodeError {
     OutOfOrderPage(PageNum, PageNum),
     #[error("invalid page buffer size: {0}, expected {1}")]
     InvalidBufferSize(usize, PageSize),
-    #[error("write error")]
+    #[error("write")]
     Write(#[from] io::Error),
 }
 
@@ -40,7 +44,7 @@ impl<'a, W> Encoder<'a, W>
 where
     W: io::Write,
 {
-    pub fn new(mut w: W, hdr: &Header) -> Result<Encoder<'a, W>> {
+    pub fn new(mut w: W, hdr: &Header) -> Result<Encoder<'a, W>, Error> {
         let mut digest = CRC64.digest();
         {
             let writer = CrcDigestWrite::new(&mut w, &mut digest);
@@ -56,51 +60,53 @@ where
         })
     }
 
-    fn validate_page_num(&self, page_num: PageNum) -> result::Result<(), PageEncodeError> {
+    fn validate_page_num(&self, page_num: PageNum) -> Result<(), Error> {
         let lock = PageNum::lock_page(self.page_size);
 
         if page_num == lock {
-            return Err(PageEncodeError::LockPage(page_num));
+            return Err(Error::LockPage(page_num));
         }
         if self.is_snapshot {
             if self.last_page_num.is_none() && page_num != PageNum::ONE {
-                return Err(PageEncodeError::FirstSnapshotPage);
+                return Err(Error::FirstSnapshotPage);
             } else if let Some(last) = self.last_page_num {
                 if last + 1 != Some(page_num)
                     || last + 1 != Some(lock) && last + 2 != Some(page_num)
                 {
-                    return Err(PageEncodeError::NonsequentialPages(last, page_num));
+                    return Err(Error::NonsequentialPages(last, page_num));
                 }
             }
         } else if let Some(last) = self.last_page_num {
             if last >= page_num {
-                return Err(PageEncodeError::OutOfOrderPage(last, page_num));
+                return Err(Error::OutOfOrderPage(last, page_num));
             }
         }
 
         Ok(())
     }
 
-    pub fn encode_page(&mut self, page_num: PageNum, data: &[u8]) -> Result<()> {
+    pub fn encode_page(&mut self, page_num: PageNum, data: &[u8]) -> Result<(), Error> {
         self.validate_page_num(page_num)?;
         if data.len() != self.page_size.into_inner() as usize {
-            return Err(PageEncodeError::InvalidBufferSize(data.len(), self.page_size).into());
+            return Err(Error::InvalidBufferSize(data.len(), self.page_size));
         }
 
-        let mut writer = CrcDigestWrite::new(&mut self.w, &mut self.digest);
-        PageHeader(Some(page_num)).encode_into(&mut writer)?;
-        writer.write_all(data).map_err(PageEncodeError::Write)?;
+        {
+            let mut writer = CrcDigestWrite::new(&mut self.w, &mut self.digest);
+            PageHeader(Some(page_num)).encode_into(&mut writer)?;
+            writer.write_all(data)?;
+        }
 
         self.last_page_num = Some(page_num);
 
         Ok(())
     }
 
-    pub fn finish(mut self, post_apply_checksum: Checksum) -> Result<Trailer> {
+    pub fn finish(mut self, post_apply_checksum: Checksum) -> Result<Trailer, Error> {
         let mut writer = CrcDigestWrite::new(&mut self.w, &mut self.digest);
         PageHeader(None).encode_into(&mut writer)?;
 
-        let writer = self.w.finish().map_err(PageEncodeError::Write)?;
+        let writer = self.w.finish()?;
         self.digest
             .update(&post_apply_checksum.into_inner().to_be_bytes());
 
@@ -168,9 +174,9 @@ where
 /// An [`io::Write`] computing a digest on the bytes written.
 struct CrcDigestWrite<'a, 'b, W>
 where
-    W: 'a + io::Write,
+    W: io::Write,
 {
-    inner: &'a mut W,
+    inner: W,
     digest: &'a mut crc::Digest<'b, u64>,
 }
 
@@ -178,7 +184,7 @@ impl<'a, 'b, W> CrcDigestWrite<'a, 'b, W>
 where
     W: io::Write,
 {
-    fn new(inner: &'a mut W, digest: &'a mut crc::Digest<'b, u64>) -> Self {
+    fn new(inner: W, digest: &'a mut crc::Digest<'b, u64>) -> Self {
         CrcDigestWrite { inner, digest }
     }
 }
@@ -200,10 +206,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{CrcDigestWrite, Encoder, PageEncodeError};
+    use super::{CrcDigestWrite, Encoder, Error};
     use crate::{
         ltx::{self, CRC64},
-        Checksum, Error, Header, HeaderFlags, PageNum, PageSize, TXID,
+        Checksum, Header, HeaderFlags, PageNum, PageSize, TXID,
     };
     use std::{io::Write, time};
 
@@ -217,6 +223,7 @@ mod tests {
             writer.write(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
             Ok(10)
         ));
+        assert_eq!(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10], buf);
         assert_eq!(6672316476627126589, digest.finalize());
     }
 
@@ -315,7 +322,7 @@ mod tests {
 
         assert!(matches!(
             enc.encode_page(page1_num, page1.as_slice()),
-            Err(Error::PageEncode(PageEncodeError::LockPage(p))) if p == page1_num
+            Err(Error::LockPage(p)) if p == page1_num
         ));
     }
 
@@ -344,7 +351,7 @@ mod tests {
             .expect("failed to encode page1");
         assert!(matches!(
             enc.encode_page(page3_num, page3.as_slice()),
-            Err(Error::PageEncode(PageEncodeError::NonsequentialPages(a, b))) if a == page1_num && b == page3_num
+            Err(Error::NonsequentialPages(a, b)) if a == page1_num && b == page3_num
         ));
     }
 
@@ -373,7 +380,7 @@ mod tests {
             .expect("failed to encode page3");
         assert!(matches!(
             enc.encode_page(page1_num, page1.as_slice()),
-            Err(Error::PageEncode(PageEncodeError::OutOfOrderPage(a, b))) if a == page3_num && b == page1_num
+            Err(Error::OutOfOrderPage(a, b)) if a == page3_num && b == page1_num
         ));
     }
 
@@ -399,7 +406,7 @@ mod tests {
 
         assert!(matches!(
             enc.encode_page(page1_num, page1.as_slice()),
-            Err(Error::PageEncode(PageEncodeError::FirstSnapshotPage))
+            Err(Error::FirstSnapshotPage)
         ));
     }
 }
