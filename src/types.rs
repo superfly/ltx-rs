@@ -50,6 +50,14 @@ impl Checksum {
     }
 }
 
+impl ops::BitXor<Checksum> for Checksum {
+    type Output = Checksum;
+
+    fn bitxor(self, rhs: Checksum) -> Self::Output {
+        Checksum::new(self.0 ^ rhs.0)
+    }
+}
+
 /// PageSize represents a database page size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PageSize(u32);
