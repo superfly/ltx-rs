@@ -54,4 +54,35 @@ jobs:
           toolchain: "stable"
 
       - name: Run unit tests
-        run: cargo test
+        run: cargo test --lib
+
+  integration-test:
+    name: "Integration Tests"
+    runs-on: ubuntu-latest
+    env:
+      GO_LTX_VERSION: v0.3.5
+      LTX_BIN: "/usr/local/bin/ltx"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "stable"
+
+      - name: Download ltx binary
+        run: |
+          curl -L -o /tmp/ltx.tar.gz https://github.com/superfly/ltx/releases/download/${GO_LTX_VERSION}/ltx-${GO_LTX_VERSION}-linux-amd64.tar.gz
+          mkdir -p /usr/local/bin
+          tar -C /usr/local/bin -xf /tmp/ltx.tar.gz ltx
+          chmod +x $LTX_BIN
+
+      - name: Run integration tests
+        run: cargo test --test '*' --all-features
