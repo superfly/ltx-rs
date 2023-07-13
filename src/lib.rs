@@ -4,7 +4,7 @@ mod ltx;
 mod types;
 mod utils;
 
-pub use ltx::{Header, HeaderFlags, Trailer};
+pub use crate::ltx::{Header, HeaderFlags, PageChecksum, Trailer};
 pub use types::{Checksum, PageNum, PageSize, TXID};
 
 pub use decoder::{Decoder, Error as DecodeError};

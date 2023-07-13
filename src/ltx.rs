@@ -288,6 +288,25 @@ impl PageHeader {
     }
 }
 
+/// PageChecksum computes LTX page checksum.
+pub trait PageChecksum {
+    fn page_checksum(&self, pgno: PageNum) -> Checksum;
+}
+
+impl<T> PageChecksum for T
+where
+    T: AsRef<[u8]>,
+{
+    fn page_checksum(&self, pgno: PageNum) -> Checksum {
+        let mut digest = CRC64.digest();
+
+        digest.update(&pgno.into_inner().to_be_bytes());
+        digest.update(self.as_ref());
+
+        Checksum::new(digest.finalize())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Header, HeaderFlags, HeaderValidateError, PageHeader, Trailer};
