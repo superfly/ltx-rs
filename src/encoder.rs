@@ -28,6 +28,15 @@ pub enum Error {
     Write(#[from] io::Error),
 }
 
+impl From<Error> for io::Error {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Write(ioe) => ioe,
+            _ => io::Error::new(io::ErrorKind::Other, e),
+        }
+    }
+}
+
 /// Encoder implements an encoder for LTX files.
 pub struct Encoder<'a, W>
 where
