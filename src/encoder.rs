@@ -70,9 +70,7 @@ where
             if self.last_page_num.is_none() && page_num != PageNum::ONE {
                 return Err(Error::FirstSnapshotPage);
             } else if let Some(last) = self.last_page_num {
-                if last + 1 != Some(page_num)
-                    || last + 1 == Some(lock) && last + 2 != Some(page_num)
-                {
+                if last + 1 != page_num || last + 1 == lock && last + 2 != page_num {
                     return Err(Error::NonsequentialPages(last, page_num));
                 }
             }

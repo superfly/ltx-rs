@@ -28,6 +28,17 @@ impl fmt::Display for TXID {
     }
 }
 
+impl ops::Add<u64> for TXID {
+    type Output = TXID;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        let sum = self.into_inner() + rhs;
+        assert!(sum != 0, "TX ID overflow");
+
+        TXID(unsafe { num::NonZeroU64::new_unchecked(sum) })
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 #[error("transaction ID must be non-zero")]
 pub struct TXIDError;
@@ -123,10 +134,13 @@ impl fmt::Display for PageNum {
 }
 
 impl ops::Add<u32> for PageNum {
-    type Output = Option<PageNum>;
+    type Output = PageNum;
 
     fn add(self, rhs: u32) -> Self::Output {
-        PageNum::new(self.into_inner() + rhs).ok()
+        let sum = self.into_inner() + rhs;
+        assert!(sum != 0, "page number overflow");
+
+        PageNum(unsafe { num::NonZeroU32::new_unchecked(sum) })
     }
 }
 
