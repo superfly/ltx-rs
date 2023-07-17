@@ -1,4 +1,4 @@
-use std::{fmt, num, ops};
+use std::{fmt, io, num, ops};
 
 // TXID represents a transaction ID.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -133,6 +133,12 @@ impl ops::Add<u32> for PageNum {
 #[derive(thiserror::Error, Debug)]
 #[error("transaction ID must be non-zero")]
 pub struct PageNumError;
+
+impl From<PageNumError> for io::Error {
+    fn from(e: PageNumError) -> Self {
+        io::Error::new(io::ErrorKind::InvalidInput, e)
+    }
+}
 
 #[cfg(test)]
 mod tests {
