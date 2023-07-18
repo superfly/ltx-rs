@@ -203,7 +203,7 @@ impl From<PageNumError> for io::Error {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Pos {
     #[serde(rename = "txid")]
     pub txid: TXID,
