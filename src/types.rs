@@ -178,7 +178,7 @@ impl PageNum {
 
 impl fmt::Display for PageNum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.0.get())
+        write!(f, "{:08x}", self.0.get())
     }
 }
 
