@@ -220,7 +220,7 @@ impl fmt::Display for Pos {
 #[cfg(test)]
 mod tests {
     use super::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, Pos, TXIDError, TXID};
-    use serde_test::{assert_de_tokens, assert_ser_tokens, Token};
+    use serde_test::{assert_tokens, Token};
 
     #[test]
     fn txid() {
@@ -251,36 +251,13 @@ mod tests {
     }
 
     #[test]
-    fn pos_serialize() {
+    fn pos_ser_de() {
         let pos = Pos {
             txid: TXID::new(0x123).unwrap(),
             post_apply_checksum: Checksum::new(0x456),
         };
 
-        assert_ser_tokens(
-            &pos,
-            &[
-                Token::Struct {
-                    name: "Pos",
-                    len: 2,
-                },
-                Token::Str("txid"),
-                Token::Str("0000000000000123"),
-                Token::Str("postApplyChecksum"),
-                Token::Str("8000000000000456"),
-                Token::StructEnd,
-            ],
-        );
-    }
-
-    #[test]
-    fn pos_deserialize() {
-        let pos = Pos {
-            txid: TXID::new(0x123).unwrap(),
-            post_apply_checksum: Checksum::new(0x456),
-        };
-
-        assert_de_tokens(
+        assert_tokens(
             &pos,
             &[
                 Token::Struct {
