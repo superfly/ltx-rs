@@ -1,7 +1,10 @@
 use std::{fmt, io, num, ops};
 
 // TXID represents a transaction ID.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(into = "String", try_from = "String")]
 pub struct TXID(num::NonZeroU64);
 
 impl TXID {
@@ -12,7 +15,7 @@ impl TXID {
         if let Some(id) = num::NonZeroU64::new(id) {
             Ok(Self(id))
         } else {
-            Err(TXIDError)
+            Err(TXIDError::Zero)
         }
     }
 
@@ -25,6 +28,21 @@ impl TXID {
 impl fmt::Display for TXID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{:016x}", self.0.get())
+    }
+}
+
+impl From<TXID> for String {
+    fn from(txid: TXID) -> Self {
+        txid.to_string()
+    }
+}
+
+impl TryFrom<String> for TXID {
+    type Error = TXIDError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let txid = u64::from_str_radix(&value, 16).map_err(|_| TXIDError::NonInteger)?;
+        TXID::new(txid)
     }
 }
 
@@ -41,10 +59,16 @@ impl ops::Add<u64> for TXID {
 
 #[derive(thiserror::Error, Debug)]
 #[error("transaction ID must be non-zero")]
-pub struct TXIDError;
+pub enum TXIDError {
+    #[error("non-integer transaction ID")]
+    NonInteger,
+    #[error("zero transaction ID")]
+    Zero,
+}
 
 /// Checksum represents a database or file checksum.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "String", try_from = "String")]
 pub struct Checksum(u64);
 
 impl Checksum {
@@ -61,6 +85,27 @@ impl Checksum {
     }
 }
 
+impl fmt::Display for Checksum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{:016x}", self.0)
+    }
+}
+
+impl From<Checksum> for String {
+    fn from(txid: Checksum) -> Self {
+        txid.to_string()
+    }
+}
+
+impl TryFrom<String> for Checksum {
+    type Error = ChecksumError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let checksum = u64::from_str_radix(&value, 16).map_err(|_| ChecksumError)?;
+        Ok(Checksum::new(checksum))
+    }
+}
+
 impl ops::BitXor<Checksum> for Checksum {
     type Output = Checksum;
 
@@ -68,6 +113,10 @@ impl ops::BitXor<Checksum> for Checksum {
         Checksum::new(self.0 ^ rhs.0)
     }
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error("non-integer checksum")]
+pub struct ChecksumError;
 
 /// PageSize represents a database page size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,14 +203,29 @@ impl From<PageNumError> for io::Error {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Pos {
+    #[serde(rename = "txid")]
+    pub txid: TXID,
+    #[serde(rename = "postApplyChecksum")]
+    pub post_apply_checksum: Checksum,
+}
+
+impl fmt::Display for Pos {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}/{}", self.txid, self.post_apply_checksum)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, TXIDError, TXID};
+    use super::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, Pos, TXIDError, TXID};
+    use serde_test::{assert_de_tokens, assert_ser_tokens, Token};
 
     #[test]
     fn txid() {
         assert_eq!(10, TXID::new(10).unwrap().into_inner());
-        assert!(matches!(TXID::new(0), Err(TXIDError)));
+        assert!(matches!(TXID::new(0), Err(TXIDError::Zero)));
         assert_eq!("000000000000000a", format!("{}", TXID::new(10).unwrap()))
     }
 
@@ -184,5 +248,51 @@ mod tests {
     fn page_num() {
         assert_eq!(10, PageNum::new(10).unwrap().into_inner());
         assert!(matches!(PageNum::new(0), Err(PageNumError)));
+    }
+
+    #[test]
+    fn pos_serialize() {
+        let pos = Pos {
+            txid: TXID::new(0x123).unwrap(),
+            post_apply_checksum: Checksum::new(0x456),
+        };
+
+        assert_ser_tokens(
+            &pos,
+            &[
+                Token::Struct {
+                    name: "Pos",
+                    len: 2,
+                },
+                Token::Str("txid"),
+                Token::Str("0000000000000123"),
+                Token::Str("postApplyChecksum"),
+                Token::Str("8000000000000456"),
+                Token::StructEnd,
+            ],
+        );
+    }
+
+    #[test]
+    fn pos_deserialize() {
+        let pos = Pos {
+            txid: TXID::new(0x123).unwrap(),
+            post_apply_checksum: Checksum::new(0x456),
+        };
+
+        assert_de_tokens(
+            &pos,
+            &[
+                Token::Struct {
+                    name: "Pos",
+                    len: 2,
+                },
+                Token::Str("txid"),
+                Token::Str("0000000000000123"),
+                Token::Str("postApplyChecksum"),
+                Token::Str("8000000000000456"),
+                Token::StructEnd,
+            ],
+        );
     }
 }
