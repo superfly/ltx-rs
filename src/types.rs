@@ -92,8 +92,8 @@ impl fmt::Display for Checksum {
 }
 
 impl From<Checksum> for String {
-    fn from(txid: Checksum) -> Self {
-        txid.to_string()
+    fn from(checksum: Checksum) -> Self {
+        checksum.to_string()
     }
 }
 
