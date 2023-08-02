@@ -1,4 +1,4 @@
-use std::{fmt, io, num, ops};
+use std::{fmt, io, num, ops, path::PathBuf};
 
 // TXID represents a transaction ID.
 #[derive(
@@ -151,7 +151,8 @@ impl fmt::Display for PageSize {
 pub struct PageSizeError(u32);
 
 /// PageNum represents a database page number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "u32")]
 pub struct PageNum(num::NonZeroU32);
 
 impl PageNum {
@@ -174,11 +175,24 @@ impl PageNum {
     pub const fn lock_page(page_size: PageSize) -> PageNum {
         PageNum(unsafe { num::NonZeroU32::new_unchecked(0x40000000 / page_size.into_inner() + 1) })
     }
+
+    /// Returns the name of the file used to store this page on disk.
+    pub fn file_name(&self) -> PathBuf {
+        format!("{:08x}", self.0.get()).into()
+    }
+}
+
+impl TryFrom<u32> for PageNum {
+    type Error = PageNumError;
+
+    fn try_from(v: u32) -> Result<Self, Self::Error> {
+        PageNum::new(v)
+    }
 }
 
 impl fmt::Display for PageNum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{:08x}", self.0.get())
+        write!(f, "{}", self.0.get())
     }
 }
 
@@ -220,7 +234,7 @@ impl fmt::Display for Pos {
 #[cfg(test)]
 mod tests {
     use super::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, Pos, TXIDError, TXID};
-    use serde_test::{assert_tokens, Token};
+    use serde_test::{assert_de_tokens, assert_tokens, Token};
 
     #[test]
     fn txid() {
@@ -271,5 +285,12 @@ mod tests {
                 Token::StructEnd,
             ],
         );
+    }
+
+    #[test]
+    fn page_num_de() {
+        let pgnum = PageNum::new(123).unwrap();
+
+        assert_de_tokens(&pgnum, &[Token::U32(123)]);
     }
 }
