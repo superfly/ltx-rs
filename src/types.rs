@@ -1,4 +1,7 @@
-use std::{fmt, io, num, ops, path::PathBuf};
+use std::{
+    fmt, io, num, ops,
+    path::{Path, PathBuf},
+};
 
 // TXID represents a transaction ID.
 #[derive(
@@ -175,11 +178,6 @@ impl PageNum {
     pub const fn lock_page(page_size: PageSize) -> PageNum {
         PageNum(unsafe { num::NonZeroU32::new_unchecked(0x40000000 / page_size.into_inner() + 1) })
     }
-
-    /// Returns the name of the file used to store this page on disk.
-    pub fn file_name(&self) -> PathBuf {
-        format!("{:08x}", self.0.get()).into()
-    }
 }
 
 impl TryFrom<u32> for PageNum {
@@ -187,6 +185,22 @@ impl TryFrom<u32> for PageNum {
 
     fn try_from(v: u32) -> Result<Self, Self::Error> {
         PageNum::new(v)
+    }
+}
+
+impl From<PageNum> for PathBuf {
+    fn from(pgno: PageNum) -> Self {
+        format!("{:08x}", pgno.0.get()).into()
+    }
+}
+
+impl TryFrom<&Path> for PageNum {
+    type Error = PageNumError;
+
+    fn try_from(v: &Path) -> Result<Self, Self::Error> {
+        let v = v.to_str().ok_or(PageNumError)?;
+        let pgno = u32::from_str_radix(v, 16).map_err(|_| PageNumError)?;
+        PageNum::new(pgno)
     }
 }
 
@@ -235,6 +249,7 @@ impl fmt::Display for Pos {
 mod tests {
     use super::{Checksum, PageNum, PageNumError, PageSize, PageSizeError, Pos, TXIDError, TXID};
     use serde_test::{assert_de_tokens, assert_tokens, Token};
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn txid() {
@@ -262,6 +277,16 @@ mod tests {
     fn page_num() {
         assert_eq!(10, PageNum::new(10).unwrap().into_inner());
         assert!(matches!(PageNum::new(0), Err(PageNumError)));
+
+        assert_eq!(
+            Path::new("000000ff"),
+            &PathBuf::from(PageNum::new(255).unwrap())
+        );
+
+        assert_eq!(
+            PageNum::new(255).unwrap(),
+            PageNum::try_from(Path::new("000000ff")).unwrap()
+        );
     }
 
     #[test]
