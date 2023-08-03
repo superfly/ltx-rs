@@ -151,7 +151,7 @@ impl fmt::Display for PageSize {
 pub struct PageSizeError(u32);
 
 /// PageNum represents a database page number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 #[serde(try_from = "u32")]
 pub struct PageNum(num::NonZeroU32);
 
