@@ -1,4 +1,4 @@
-use ltx::PageChecksum;
+use litetx::{self as ltx, PageChecksum};
 use std::{
     ffi::OsString,
     fs,
@@ -11,13 +11,13 @@ mod common;
 #[test]
 #[cfg_attr(not(feature = "compat"), ignore)]
 fn encode_uncompressed() {
-    encode(ltx::HeaderFlags::empty());
+    encode(litetx::HeaderFlags::empty());
 }
 
 #[test]
 #[cfg_attr(not(feature = "compat"), ignore)]
 fn encode_compressed() {
-    encode(ltx::HeaderFlags::COMPRESS_LZ4);
+    encode(litetx::HeaderFlags::COMPRESS_LZ4);
 }
 
 #[cfg_attr(not(feature = "compat"), ignore)]
