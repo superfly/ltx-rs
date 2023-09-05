@@ -30,7 +30,7 @@ pub enum Error {
 /// # let v = Vec::new();
 /// # let mut r = &mut &v[..];
 /// #
-/// let (mut dec, header) = ltx::Decoder::new(r).expect("decoder");
+/// let (mut dec, header) = litetx::Decoder::new(r).expect("decoder");
 ///
 /// let mut buf = vec![0; header.page_size.into_inner() as usize];
 /// while let Some(page_num) = dec.decode_page(&mut buf).expect("decode_page") {
