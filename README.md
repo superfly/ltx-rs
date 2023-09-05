@@ -1,5 +1,8 @@
 # Lite Transaction File (LTX)
 
+[![Cargo](https://img.shields.io/crates/v/litetx.svg)](https://crates.io/crates/litetx)
+[![Documentation](https://docs.rs/litetx/badge.svg)](https://docs.rs/litetx)
+
 The LTX file format provides a way to store SQLite transactional data in
 a way that can be encrypted and compacted and is optimized for performance.
 
