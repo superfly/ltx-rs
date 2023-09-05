@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// TXID represents a transaction ID.
+/// An ID of a database transaction.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -13,7 +13,7 @@ pub struct TXID(num::NonZeroU64);
 impl TXID {
     pub const ONE: TXID = TXID(num::NonZeroU64::MIN);
 
-    /// new constructs new TXID.
+    /// Contruct a new database transaction ID.
     pub const fn new(id: u64) -> Result<Self, TXIDError> {
         if let Some(id) = num::NonZeroU64::new(id) {
             Ok(Self(id))
@@ -22,7 +22,7 @@ impl TXID {
         }
     }
 
-    /// into_inner returns underlying integer representation of TXID.
+    /// Return the underlying integer representation of the transaction ID.
     pub const fn into_inner(&self) -> u64 {
         self.0.get()
     }
@@ -60,6 +60,7 @@ impl ops::Add<u64> for TXID {
     }
 }
 
+/// An error representing invalid transaction ID.
 #[derive(thiserror::Error, Debug)]
 #[error("transaction ID must be non-zero")]
 pub enum TXIDError {
@@ -69,7 +70,7 @@ pub enum TXIDError {
     Zero,
 }
 
-/// Checksum represents a database or file checksum.
+/// A database checksum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
 pub struct Checksum(u64);
@@ -77,12 +78,12 @@ pub struct Checksum(u64);
 impl Checksum {
     const NON_ZERO_FLAG: u64 = 1 << 63;
 
-    // new constructs new valid checksum.
+    /// Construct a new database checksum.
     pub const fn new(s: u64) -> Self {
         Self(s | Self::NON_ZERO_FLAG)
     }
 
-    // into_inner returns underlying integer representation of checksum.
+    /// Return underlying integer representation of the database checksum.
     pub const fn into_inner(&self) -> u64 {
         self.0
     }
@@ -117,11 +118,12 @@ impl ops::BitXor<Checksum> for Checksum {
     }
 }
 
+/// An error representing an invalid database checksum.
 #[derive(thiserror::Error, Debug)]
 #[error("non-integer checksum")]
 pub struct ChecksumError;
 
-/// PageSize represents a database page size.
+/// A database page size in bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PageSize(u32);
 
@@ -129,7 +131,7 @@ impl PageSize {
     const MIN_PAGE_SIZE: u32 = 512;
     const MAX_PAGE_SIZE: u32 = 65536;
 
-    // new constructs new valid page size
+    /// Construct a new database page size.
     pub const fn new(s: u32) -> Result<PageSize, PageSizeError> {
         if s < Self::MIN_PAGE_SIZE || s > Self::MAX_PAGE_SIZE || (s & (s - 1)) != 0 {
             Err(PageSizeError(s))
@@ -138,6 +140,7 @@ impl PageSize {
         }
     }
 
+    /// Return the underlying integer representation of the database page size.
     pub const fn into_inner(&self) -> u32 {
         self.0
     }
@@ -149,11 +152,12 @@ impl fmt::Display for PageSize {
     }
 }
 
+/// An error representing invalid database page size.
 #[derive(thiserror::Error, Debug)]
 #[error("unsupported page size: {0}")]
 pub struct PageSizeError(u32);
 
-/// PageNum represents a database page number.
+/// A database page number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 #[serde(try_from = "u32")]
 pub struct PageNum(num::NonZeroU32);
@@ -161,6 +165,7 @@ pub struct PageNum(num::NonZeroU32);
 impl PageNum {
     pub const ONE: PageNum = PageNum(num::NonZeroU32::MIN);
 
+    /// Construct a new database page number.
     pub const fn new(n: u32) -> Result<Self, PageNumError> {
         if let Some(n) = num::NonZeroU32::new(n) {
             Ok(PageNum(n))
@@ -169,12 +174,13 @@ impl PageNum {
         }
     }
 
-    /// into_inner returns underlying integer representation of TXID.
+    /// Return underlying integer representation of the database page number.
     pub const fn into_inner(&self) -> u32 {
         self.0.get()
     }
 
-    /// lock_page returns lock_page number for the given page size.
+    /// Return the [lock page](https://www.sqlite.org/fileformat.html#the_lock_byte_page) number for the
+    /// given page size.
     pub const fn lock_page(page_size: PageSize) -> PageNum {
         PageNum(unsafe { num::NonZeroU32::new_unchecked(0x40000000 / page_size.into_inner() + 1) })
     }
@@ -221,6 +227,7 @@ impl ops::Add<u32> for PageNum {
     }
 }
 
+/// An error representing invalid database page number.
 #[derive(thiserror::Error, Debug)]
 #[error("transaction ID must be non-zero")]
 pub struct PageNumError;
@@ -231,11 +238,14 @@ impl From<PageNumError> for io::Error {
     }
 }
 
+/// A position uniquely identifying a state of a database.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Pos {
     #[serde(rename = "txid")]
+    /// Last transaction ID.
     pub txid: TXID,
     #[serde(rename = "postApplyChecksum")]
+    /// Running database checksum at the given `txid`.
     pub post_apply_checksum: Checksum,
 }
 

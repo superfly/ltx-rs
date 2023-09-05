@@ -10,6 +10,7 @@ bitflags::bitflags! {
     }
 }
 
+/// A header validation error.
 #[derive(thiserror::Error, Debug)]
 pub enum HeaderValidateError {
     #[error("transaction ids out of order: ({0}, {1})")]
@@ -20,6 +21,7 @@ pub enum HeaderValidateError {
     NoPreApplyChecksum,
 }
 
+/// A header encoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum HeaderEncodeError {
     #[error("validation failed")]
@@ -30,6 +32,7 @@ pub enum HeaderEncodeError {
     Write(#[from] io::Error),
 }
 
+/// A header decoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum HeaderDecodeError {
     #[error("read error")]
@@ -56,15 +59,24 @@ pub(crate) const HEADER_SIZE: usize = 100;
 pub(crate) const TRAILER_SIZE: usize = 16;
 pub(crate) const PAGE_HEADER_SIZE: usize = 4;
 
-/// Header represets the header frame of an LTX file.
+/// An LTX file header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Header {
+    /// Flags changing the behavior of LTX encoder/decoder.
     pub flags: HeaderFlags,
+    /// The size of the database pages encoded in the file.
     pub page_size: PageSize,
+    /// The size of the database in pages.
     pub commit: PageNum,
+    /// Minimum transaction ID in the file.
     pub min_txid: TXID,
+    /// Maximum transaction ID in the file. May be equal to `min_txid` if the file
+    /// contains only one transaction.
     pub max_txid: TXID,
+    /// The time when the LTX file was created.
     pub timestamp: time::SystemTime,
+    /// Running database checksum before this LTX file is applied. `None` if the LTX
+    /// file contains the full snapshot of a database.
     pub pre_apply_checksum: Option<Checksum>,
 }
 
@@ -178,12 +190,14 @@ impl Header {
     }
 }
 
+/// A trailer encoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum TrailerEncodeError {
     #[error("write error")]
     Write(#[from] io::Error),
 }
 
+/// A trailer decoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum TrailerDecodeError {
     #[error("read error")]
@@ -194,10 +208,12 @@ pub enum TrailerDecodeError {
     FileChecksum(u64),
 }
 
-/// Trailer represets the trailer frame of an LTX file.
+/// An LTX file trailer.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Trailer {
+    /// Running database checksum after this LTX file has been applied.
     pub post_apply_checksum: Checksum,
+    /// LTX file checksum.
     pub file_checksum: Checksum,
 }
 
@@ -216,7 +232,7 @@ impl Trailer {
         Ok(())
     }
 
-    pub fn decode_from<R>(mut r: R) -> Result<Trailer, TrailerDecodeError>
+    pub(crate) fn decode_from<R>(mut r: R) -> Result<Trailer, TrailerDecodeError>
     where
         R: io::Read,
     {
@@ -241,12 +257,14 @@ impl Trailer {
     }
 }
 
+/// A page header encoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum PageHeaderEncodeError {
     #[error("write error")]
     Write(#[from] io::Error),
 }
 
+/// A page header decoding error.
 #[derive(thiserror::Error, Debug)]
 pub enum PageHeaderDecodeError {
     #[error("read error")]
@@ -255,7 +273,6 @@ pub enum PageHeaderDecodeError {
     PageNum(PageNumError),
 }
 
-/// PageHeader represets a page header frame of an LTX file.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct PageHeader(pub(crate) Option<PageNum>);
 
@@ -270,7 +287,7 @@ impl PageHeader {
         Ok(())
     }
 
-    pub fn decode_from<R>(mut r: R) -> Result<PageHeader, PageHeaderDecodeError>
+    pub(crate) fn decode_from<R>(mut r: R) -> Result<PageHeader, PageHeaderDecodeError>
     where
         R: io::Read,
     {
@@ -288,8 +305,9 @@ impl PageHeader {
     }
 }
 
-/// PageChecksum computes LTX page checksum.
+/// A trait for page checksum calculation.
 pub trait PageChecksum {
+    /// Calculate database page checksum for the given page number.
     fn page_checksum(&self, pgno: PageNum) -> Checksum;
 }
 

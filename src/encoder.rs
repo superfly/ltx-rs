@@ -5,8 +5,8 @@ use crate::{
 use lz4_flex::frame::{BlockSize, FrameEncoder, FrameInfo};
 use std::io::{self, Write};
 
+/// An error that can be returned by [`Encoder`].
 #[derive(thiserror::Error, Debug)]
-// An error that can be returned by `[Encoder]`.
 pub enum Error {
     #[error("header")]
     Header(#[from] HeaderEncodeError),
@@ -37,7 +37,30 @@ impl From<Error> for io::Error {
     }
 }
 
-/// Encoder implements an encoder for LTX files.
+/// An LTX file encoder.
+///
+/// # Example
+/// ```
+/// # use std::time::SystemTime;
+/// # use ltx::PageChecksum;
+/// # let mut w = Vec::new();
+/// # let page = vec![0; 4096];
+/// #
+/// let mut enc = ltx::Encoder::new(&mut w, &ltx::Header{
+///     flags: ltx::HeaderFlags::empty(),
+///     page_size: ltx::PageSize::new(4096).unwrap(),
+///     commit: ltx::PageNum::new(1).unwrap(),
+///     min_txid: ltx::TXID::ONE,
+///     max_txid: ltx::TXID::ONE,
+///     timestamp: SystemTime::now(),
+///     pre_apply_checksum: None,
+/// }).expect("encoder");
+///
+/// let page_num = ltx::PageNum::new(1).unwrap();
+/// enc.encode_page(page_num, &page).expect("encode_page");
+///
+/// enc.finish(page.page_checksum(page_num)).expect("finish");
+/// ```
 pub struct Encoder<'a, W>
 where
     W: io::Write,
@@ -53,6 +76,10 @@ impl<'a, W> Encoder<'a, W>
 where
     W: io::Write,
 {
+    /// Create a new [`Encoder`] that writes to `w`.
+    ///
+    /// Depending on the `hdr` flags, the [`Encoder`] will produce either compressed or
+    /// uncompressed LTX file.
     pub fn new(mut w: W, hdr: &Header) -> Result<Encoder<'a, W>, Error> {
         let mut digest = CRC64.digest();
         {
@@ -92,6 +119,14 @@ where
         Ok(())
     }
 
+    /// Encode a page with the given `page_num` and `data`.
+    ///
+    /// Depending on the [`Header`] passed to [`Encoder::new`], the following constraints
+    /// are applied:
+    ///  - if `min_txid` is 1, the LTX file is considered to be a full snapshot of the database
+    ///    and must contain all pages from the first one up to `commit` in increasing oreder.
+    ///  - if `min_txid` is greater than 1, the LTX file may contain a subset of database
+    ///    pages in increasing order.
     pub fn encode_page(&mut self, page_num: PageNum, data: &[u8]) -> Result<(), Error> {
         self.validate_page_num(page_num)?;
         if data.len() != self.page_size.into_inner() as usize {
@@ -109,6 +144,7 @@ where
         Ok(())
     }
 
+    /// Consume the encoder and write LTX trailer into the output.
     pub fn finish(mut self, post_apply_checksum: Checksum) -> Result<Trailer, Error> {
         let mut writer = CrcDigestWrite::new(&mut self.w, &mut self.digest);
         PageHeader(None).encode_into(&mut writer)?;
