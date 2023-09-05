@@ -2,8 +2,11 @@
 name = "ltx"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Lite Transaction File (LTX) encoding/decoding"
+repository = "https://github.com/superfly/ltx-rs"
+license = "Apache-2.0"
+keywords = ["sqlite", "ltx", "litefs"]
+categories = ["encoding"]
 
 [dependencies]
 bitflags = "2.3"

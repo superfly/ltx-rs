@@ -5,6 +5,7 @@ use crate::{
 use lz4_flex::frame::FrameDecoder;
 use std::io::{self, Read};
 
+/// An error that can be returned by [`Decoder`].
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("header")]
@@ -21,7 +22,23 @@ pub enum Error {
     Read(#[from] io::Error),
 }
 
-/// Decoder implements a decoder for LTX files.
+/// An LTX file decoder.
+///
+/// # Example
+/// ```no_run
+/// # use std::time::SystemTime;
+/// # let v = Vec::new();
+/// # let mut r = &mut &v[..];
+/// #
+/// let (mut dec, header) = ltx::Decoder::new(r).expect("decoder");
+///
+/// let mut buf = vec![0; header.page_size.into_inner() as usize];
+/// while let Some(page_num) = dec.decode_page(&mut buf).expect("decode_page") {
+///     // do something with the page
+/// }
+///
+/// let trailer = dec.finish().expect("finish");
+/// ```
 pub struct Decoder<'a, R>
 where
     R: io::Read,
@@ -36,6 +53,7 @@ impl<'a, R> Decoder<'a, R>
 where
     R: io::Read,
 {
+    /// Construct a new [`Decoder`] that reads from `r`.
     pub fn new(mut r: R) -> Result<(Decoder<'a, R>, Header), Error> {
         let mut digest = CRC64.digest();
         let hdr = {
@@ -54,6 +72,10 @@ where
         ))
     }
 
+    /// Decode the next page from the LTX file.
+    ///
+    /// Returns `Ok(Some(page_num))` if a page has been successfully decoded.
+    /// Return `Ok(None)` if the LTX file doesn't have any more pages.
     pub fn decode_page(&mut self, data: &mut [u8]) -> Result<Option<PageNum>, Error> {
         if self.pages_done {
             return Ok(None);
@@ -75,6 +97,7 @@ where
         Ok(header.0)
     }
 
+    /// Consume the decoder and verify file checksum.
     pub fn finish(mut self) -> Result<Trailer, Error> {
         let reader = self.r.finish()?;
         let trailer = Trailer::decode_from(reader)?;
